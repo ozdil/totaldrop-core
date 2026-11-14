@@ -24,7 +24,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_BASELINE = "ebe2b194defc0a0092891963e3d72d4f6ea2d8d1"
+DEFAULT_BASELINE = "c86c298f678eb062c670efb2d34ce79dfda08ec1"
 DEFAULT_GITHUB_ORG = "totaldrop-app"
 
 MODULE_TO_GITHUB_REPO: dict[str, str] = {
