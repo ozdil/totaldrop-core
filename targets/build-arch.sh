@@ -31,7 +31,9 @@ for arg in "$@"; do
   esac
 done
 
-export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
+if [[ -z "${RUSTUP_TOOLCHAIN:-}" ]] && ! rustup show active-toolchain >/dev/null 2>&1; then
+  export RUSTUP_TOOLCHAIN="stable"
+fi
 
 PACKAGES=("--workspace")
 case "$PROFILE" in
@@ -80,7 +82,7 @@ if [[ ${#EXTRA_CARGO_ARGS[@]} -gt 0 ]]; then
 fi
 
 echo "Profile:        $PROFILE"
-echo "Toolchain:      $RUSTUP_TOOLCHAIN"
+echo "Toolchain:      ${RUSTUP_TOOLCHAIN:-$(rustup show active-toolchain | awk '{print $1}')}"
 echo "Target triple:  ${TARGET_TRIPLE:-<host default>}"
 echo "RUSTFLAGS:      ${ARCH_RUSTFLAGS:-<none>}"
 echo "Command:        RUSTFLAGS=\"$ARCH_RUSTFLAGS\" ${CMD[*]}"
@@ -92,7 +94,7 @@ fi
 if [[ -n "$TARGET_TRIPLE" ]]; then
   INSTALLED_TARGETS="$(rustup target list --installed 2>/dev/null || true)"
   if ! grep -qx "$TARGET_TRIPLE" <<<"$INSTALLED_TARGETS"; then
-    echo "error: Rust target '$TARGET_TRIPLE' is not installed in toolchain '$RUSTUP_TOOLCHAIN'." >&2
+    echo "error: Rust target '$TARGET_TRIPLE' is not installed in toolchain '${RUSTUP_TOOLCHAIN:-active}'." >&2
     echo "Install it first with: rustup target add $TARGET_TRIPLE" >&2
     exit 1
   fi
