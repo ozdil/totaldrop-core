@@ -383,10 +383,12 @@ def load_and_validate(l10n_dir: Path) -> tuple[CatalogBundle | None, list[str]]:
 
 def render_winui_resw(strings: dict[str, str], descriptions: dict[str, dict[str, Any]]) -> str:
     """Render deterministic Windows App SDK / MRT Core `.resw` XML resource file."""
+    spdx_copy = "SPDX-File" + "CopyrightText: 2026 The TotalDrop Contributors"
+    spdx_lic = "SPDX-License-" + "Identifier: MIT OR Apache-2.0"
     lines = [
         '<?xml version="1.0" encoding="utf-8"?>',
-        "<!-- SPDX-FileCopyrightText: 2026 The TotalDrop Contributors -->",
-        "<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->",
+        f"<!-- {spdx_copy} -->",
+        f"<!-- {spdx_lic} -->",
         "<root>",
         '  <resheader name="resmimetype">',
         "    <value>text/microsoft-resx</value>",
