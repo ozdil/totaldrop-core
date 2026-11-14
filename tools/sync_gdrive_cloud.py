@@ -106,9 +106,18 @@ def sync_all_to_gdrive(
             print(f"[cloud-sync] Cloning {org}/{repo} ...", flush=True)
             subprocess.check_call(["git", "clone", "--quiet", "--mirror", url, str(clone_dir)])
 
-            head_sha = subprocess.check_output(
-                ["git", "-C", str(clone_dir), "rev-parse", "HEAD"], text=True
-            ).strip()
+            head_sha = ""
+            for candidate_ref in ("refs/heads/main", "HEAD", "refs/heads/master"):
+                res = subprocess.run(
+                    ["git", "-C", str(clone_dir), "rev-parse", "--verify", candidate_ref],
+                    capture_output=True,
+                    text=True,
+                )
+                if res.returncode == 0 and res.stdout.strip():
+                    head_sha = res.stdout.strip()
+                    break
+            if not head_sha:
+                raise RuntimeError(f"Could not resolve HEAD commit for {org}/{repo}")
 
             bundle_path = tmp_root / f"{stem}.bundle"
             subprocess.check_call(
@@ -118,24 +127,52 @@ def sync_all_to_gdrive(
             checksum_lines.append(f"{bundle_sha256}  git-bundles/{bundle_path.name}")
             upsert_drive_file(bundle_path, bundles_folder_id, existing_bundles)
 
-            tar_zst_path = tmp_root / f"{stem}-{head_sha[:7]}.tar.zst"
-            # Also publish stable filename `<stem>.tar.zst` so updates preserve Drive file IDs
-            stable_tar_zst = tmp_root / f"{stem}.tar.zst"
-            with stable_tar_zst.open("wb") as out_f:
-                p_arc = subprocess.Popen(
-                    ["git", "-C", str(clone_dir), "archive", "--format=tar", f"--prefix={stem}/", "HEAD"],
-                    stdout=subprocess.PIPE,
-                )
-                subprocess.check_call(["zstd", "-q", "-19", "-f"], stdin=p_arc.stdout, stdout=out_f)
-                if p_arc.stdout is not None:
-                    p_arc.stdout.close()
-                if p_arc.wait() != 0:
-                    raise RuntimeError(f"git archive failed for {repo}")
+            # Prefer zstd if available on PATH; otherwise use git's built-in tar.gz (-9)
+            # so zero external compression binaries are required in minimal cloud VMs.
+            import shutil
 
-            archive_sha256 = sha256_file(stable_tar_zst)
-            checksum_lines.append(f"{archive_sha256}  source-archives/{stable_tar_zst.name}")
-            upsert_drive_file(stable_tar_zst, archives_folder_id, existing_archives)
-            _ = tar_zst_path
+            if shutil.which("zstd"):
+                stable_archive = tmp_root / f"{stem}.tar.zst"
+                with stable_archive.open("wb") as out_f:
+                    p_arc = subprocess.Popen(
+                        [
+                            "git",
+                            "-C",
+                            str(clone_dir),
+                            "archive",
+                            "--format=tar",
+                            f"--prefix={stem}/",
+                            head_sha,
+                        ],
+                        stdout=subprocess.PIPE,
+                    )
+                    subprocess.check_call(
+                        ["zstd", "-q", "-19", "-f"], stdin=p_arc.stdout, stdout=out_f
+                    )
+                    if p_arc.stdout is not None:
+                        p_arc.stdout.close()
+                    if p_arc.wait() != 0:
+                        raise RuntimeError(f"git archive failed for {repo}")
+            else:
+                stable_archive = tmp_root / f"{stem}.tar.gz"
+                subprocess.check_call(
+                    [
+                        "git",
+                        "-C",
+                        str(clone_dir),
+                        "archive",
+                        "--format=tar.gz",
+                        "-9",
+                        f"--prefix={stem}/",
+                        "-o",
+                        str(stable_archive),
+                        head_sha,
+                    ]
+                )
+
+            archive_sha256 = sha256_file(stable_archive)
+            checksum_lines.append(f"{archive_sha256}  source-archives/{stable_archive.name}")
+            upsert_drive_file(stable_archive, archives_folder_id, existing_archives)
 
             manifest_repos.append(
                 {
@@ -145,9 +182,9 @@ def sync_all_to_gdrive(
                     "bundle_file": f"git-bundles/{bundle_path.name}",
                     "bundle_sha256": bundle_sha256,
                     "bundle_bytes": bundle_path.stat().st_size,
-                    "archive_file": f"source-archives/{stable_tar_zst.name}",
+                    "archive_file": f"source-archives/{stable_archive.name}",
                     "archive_sha256": archive_sha256,
-                    "archive_bytes": stable_tar_zst.stat().st_size,
+                    "archive_bytes": stable_archive.stat().st_size,
                 }
             )
 
