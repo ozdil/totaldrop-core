@@ -52,12 +52,14 @@ jobs:
         env:
           TOTALDROP_REQUIRE_IPV6: "1"
         run: cargo test --workspace --locked
-      - name: Test upstream delta & cloud sync tools
+      - name: Test upstream delta, 35-language codegen & cloud sync tools
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          python3 -m py_compile tools/sync_upstream_delta.py tools/test_sync_upstream_delta.py tools/sync_gdrive_cloud.py
+          python3 -m py_compile tools/sync_upstream_delta.py tools/test_sync_upstream_delta.py tools/sync_gdrive_cloud.py tools/l10n_codegen.py tools/test_l10n_codegen.py
           python3 tools/test_sync_upstream_delta.py -v
+          python3 tools/l10n_codegen.py --check
+          python3 tools/test_l10n_codegen.py -v
 
   cross-targets:
     name: Cross-architecture targets (armv7, riscv64gc, wasm32)
