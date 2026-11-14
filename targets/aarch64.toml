@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Per-CPU-Architecture Optimization Profile: AArch64 (ARM64)
+# Applies to:
+#   - aarch64-unknown-linux-gnu
+#   - aarch64-unknown-linux-musl
+#   - aarch64-apple-darwin
+#   - aarch64-apple-ios
+#   - aarch64-linux-android
+#   - aarch64-pc-windows-msvc
+#
+# Copy into `.cargo/config.toml` or pass via `./targets/build-arch.sh aarch64`.
+#
+# Cryptographic & SIMD Hardware Dispatch Summary (Suite TD0):
+# - ARMv8-A NEON / ASIMD (`+neon` — mandatory baseline on all AArch64 targets):
+#     - `blake3` 1.8.7 uses 128-bit NEON 4-way parallel chunk compression out
+#       of the box with zero runtime overhead.
+#     - `chacha20poly1305` 0.11.0 and `ring` 0.17.14 execute 4-block vectorized
+#       ChaCha20 rounds and NEON Poly1305 limbs on `EntryCipher`,
+#       `MailboxCipher`, `SessionCipher`, and QUIC packet protection.
+#     - `ml-kem` 0.3.3 vectorizes 16-bit/32-bit Barrett and Montgomery
+#       reductions across 128-bit NEON lanes.
+# - ARMv8 Cryptography Extensions (`+aes`, `+pmull`, `+sha2`, `+sha3`):
+#     - `PMULL` (`vmull_p64` polynomial carry-less multiplication) and `AES`
+#       accelerate TLS 1.3 / QUIC transport suites in `ring`.
+#     - `SHA2` (`+sha2`) provides single-cycle SHA-256 rounds, and ARMv8.2
+#       `+sha3` (which includes `SHA512H`/`SHA512H2`/`SHA512SU0`/`SHA512SU1`)
+#       accelerates SHA-512 generator hashing in CPace (`totaldrop-crypto::cpace`).
+#     - On Linux (`getauxval(AT_HWCAP)`) and Apple Silicon (where `+aes`,
+#       `+pmull`, `+sha2`, `+sha3` are baseline on M1+), hardware instructions
+#       are used automatically.
+# - Curve25519 / Ed25519:
+#     Constant-time 64-bit `u64` limb arithmetic (`UMULH` + `ADDS`/`ADCS`).
+
+[profile_meta]
+architecture = "aarch64"
+baseline_cpu = "generic"
+apple_silicon_cpu = "apple-m1"
+default_triple = "aarch64-unknown-linux-gnu"
+simd_features = ["neon"]
+crypto_features = ["aes", "pmull", "sha2"]
+optional_v8_2_features = ["sha3", "dotprod"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-feature=+neon,+aes,+pmull,+sha2"]
+
+[target.aarch64-linux-android]
+# Android ARM64 devices almost universally implement ARMv8 Crypto Extensions;
+# omit +aes,+pmull,+sha2 only if targeting rare Cortex-A53 SoCs without crypto,
+# in which case runtime AT_HWCAP detection in `ring` and `sha2` still probes it.
+rustflags = ["-C", "target-feature=+neon"]
+
+[target.aarch64-apple-darwin]
+# Apple Silicon (M1 and newer) guarantees NEON + AES + PMULL + SHA-256 + SHA-512.
+rustflags = ["-C", "target-cpu=apple-m1"]

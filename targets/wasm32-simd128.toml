@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Per-CPU-Architecture Optimization Profile: WebAssembly 32-bit + SIMD128
+# Applies to:
+#   - wasm32-unknown-unknown (browser Web Receiver — see module `10-web-wasm`)
+#   - wasm32-wasip1 / wasm32-wasip2 (sandboxed WASI runtimes)
+#
+# Crate Compatibility Note:
+#   - `totaldrop-crypto`, `totaldrop-proto`, and `totaldrop-l10n` are 100% pure
+#     safe Rust (`unsafe_code = "forbid"`) and compile cleanly to `wasm32`.
+#   - `totaldrop-core` links OS UDP sockets (`socket2`, `quinn`, `igd-next`)
+#     for native QUIC/PCP/NAT-PMP/UPnP transport and targets native OS triples;
+#     browser receivers use `10-web-wasm` (`totaldrop-wasm`) over WebSocket/WebRTC.
+#
+# Cryptographic & SIMD Hardware Dispatch Summary (Suite TD0 on Wasm):
+# - Fixed-Width 128-bit WebAssembly SIMD (`+simd128`, W3C standard supported in
+#   Chromium 91+, Firefox 89+, Safari 16.4+):
+#     - `blake3` 1.8.7 activates its `wasm32_simd` 4-way parallel chunk
+#       compressor (`i32x4` vector lanes) automatically when `target_feature =
+#       "simd128"` is enabled, delivering ~3-4x higher throughput when hashing
+#       1 MiB incoming file chunks.
+#     - `chacha20poly1305` 0.11.0 compiles ChaCha20 / XChaCha20 quarter-rounds
+#       to `v128` (`i32x4_add`, `v128_xor`, shifts) and constant-time 32-bit
+#       Poly1305 limbs without data-dependent table lookups.
+#     - `ml-kem` 0.3.3 auto-vectorizes ring-LWE polynomial arithmetic into
+#       `i16x8` / `i32x4` SIMD128 lanes.
+# - CSPRNG (`getrandom` 0.4.3):
+#     Standalone `rlib` builds/checks without `wasm-bindgen` select the opt-in
+#     `--cfg getrandom_backend="custom"` backend; downstream browser `cdylib`
+#     crates (such as `totaldrop-wasm` in `10-web-wasm`) enable the
+#     `getrandom/wasm_js` feature to delegate entropy to `crypto.getRandomValues()`.
+
+[profile_meta]
+architecture = "wasm32"
+default_triple = "wasm32-unknown-unknown"
+wasm_compatible_crates = ["totaldrop-crypto", "totaldrop-proto", "totaldrop-l10n"]
+simd_features = ["simd128"]
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+  "-C", "target-feature=+simd128",
+  "--cfg", "getrandom_backend=\"custom\"",
+]

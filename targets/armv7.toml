@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Per-CPU-Architecture Optimization Profile: ARMv7 (32-bit ARM)
+# Applies to:
+#   - armv7-unknown-linux-gnueabihf
+#   - armv7-linux-androideabi
+#
+# Copy into `.cargo/config.toml` or pass via `./targets/build-arch.sh armv7`.
+#
+# Cryptographic & SIMD Hardware Dispatch Summary (Suite TD0):
+# - Optional NEON (`+vfp3`, `+neon`):
+#     Unlike AArch64, NEON is optional in the ARMv7-A ISA specification (for
+#     example Tegra 2 lacks NEON, whereas Cortex-A7/A9/A15/A53 include it).
+#     `ring` probes `AT_HWCAP` (`HWCAP_NEON`) at runtime on Linux/Android for
+#     ChaCha20-Poly1305 QUIC packet encryption. Enabling `+neon` at compile time
+#     on known-NEON targets additionally unlocks vectorized ChaCha20 rounds in
+#     `chacha20poly1305` and LLVM auto-vectorization in `ml-kem`.
+# - Constant-time 32-bit Scalar Arithmetic:
+#     `curve25519-dalek` (5.0) and `ed25519-dalek` (3.0) automatically select
+#     radix-2^25.5 `u32` limbs on 32-bit targets so field multiplications lower
+#     to constant-time `UMULL` / `UMLAL` instructions without variable-time
+#     software 64x64->128-bit helpers (`__aeabi_lmul` is avoided on high limbs).
+# - BLAKE3 (`blake3` 1.8.7):
+#     Uses portable 32-bit word rotations natively suited to ARMv7 barrel
+#     shifters (`ROR` folded into `ADD`/`EOR` operands at zero extra cost),
+#     plus NEON 4-way compression when built with `blake3/neon` on NEON SoCs.
+
+[profile_meta]
+architecture = "armv7"
+baseline_cpu = "generic"
+default_triple = "armv7-unknown-linux-gnueabihf"
+android_triple = "armv7-linux-androideabi"
+simd_features = ["vfp3", "d32", "neon"]
+
+[target.armv7-unknown-linux-gnueabihf]
+rustflags = ["-C", "target-feature=+vfp3,+neon"]
+
+[target.armv7-linux-androideabi]
+# Android CDD mandates ARMv7-A with VFPv3-D16; runtime NEON detection in `ring`
+# keeps compatibility with legacy non-NEON devices while accelerating modern ones.
+rustflags = ["-C", "target-feature=+vfp3,-d32"]

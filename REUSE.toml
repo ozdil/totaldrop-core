@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Copyright and license annotations for files in the standalone 00-core module
+# that do not carry inline SPDX headers (JSON, ARB translations, lockfiles).
+version = 1
+
+[[annotations]]
+path = "**"
+precedence = "closest"
+SPDX-FileCopyrightText = "2026 The TotalDrop Contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = [
+  "crates/totaldrop-crypto/**",
+  "crates/totaldrop-proto/**",
+  "crates/totaldrop-core/**",
+  "crates/totaldrop-l10n/**",
+  "l10n/**",
+  "targets/**",
+]
+precedence = "closest"
+SPDX-FileCopyrightText = "2026 The TotalDrop Contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"

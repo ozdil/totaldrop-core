@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Per-CPU-Architecture Optimization Profile: RISC-V 64-bit (RV64GC)
+# Applies to:
+#   - riscv64gc-unknown-linux-gnu
+#   - riscv64gc-unknown-linux-musl
+#
+# Copy into `.cargo/config.toml` or pass via `./targets/build-arch.sh riscv64`.
+#
+# Cryptographic & SIMD Hardware Dispatch Summary (Suite TD0):
+# - Baseline ISA (`rv64gc` = `rv64imafdc` + `zicsr` + `zifencei`):
+#     All four TotalDrop core crates build cleanly on `riscv64gc` with zero
+#     architecture-specific `unsafe` blocks in workspace crates:
+#     - `blake3`, `chacha20poly1305`, `sha2`, and `ml-kem` use portable
+#       constant-time pure-Rust backends over native 64-bit / 32-bit registers.
+#     - `curve25519-dalek` and `ed25519-dalek` use verified 64-bit `u64`
+#       constant-time limbs leveraging RISC-V `MUL` / `MULHU` instructions.
+#     - `ring` 0.17.14 compiles its C/Rust portable backend on `riscv64gc` for
+#       QUIC (`quinn`) and TLS 1.3 (`rustls`).
+# - Optional RVA22 / RVA23 & Scalar/Vector Extensions:
+#     - Bit-manipulation (`+zba`, `+zbb`, `+zbc`, `+zbs`): hardware `ROR`/`ROL`
+#       and `REV8` directly accelerate ChaCha20 quarter-rounds, BLAKE3
+#       rotations, SHA-512 schedules, and carry-less multiplication (`CLMUL` /
+#       `CLMULH` via `Zbc`, analogous to x86 `PCLMULQDQ` and ARM `PMULL`).
+#     - Vector 1.0 (`+v`) & Vector Crypto (`+zvkned`, `+zvknhb`, `+zvbc`):
+#       enables LLVM loop vectorization for ML-KEM-768 NTT butterflies and
+#       wide ChaCha20/BLAKE3 state permutations on RVA23 hardware.
+
+[profile_meta]
+architecture = "riscv64"
+baseline_cpu = "generic-rv64"
+default_triple = "riscv64gc-unknown-linux-gnu"
+rva22_features = ["zba", "zbb", "zbs"]
+crypto_and_vector_features = ["zbc", "v", "zkn"]
+
+[target.riscv64gc-unknown-linux-gnu]
+# Portable RV64GC baseline compatible with Debian/Fedora/Arch RISC-V ports.
+rustflags = ["-C", "target-cpu=generic-rv64"]
+
+# For RVA22U64 / RVA23U64 boards (e.g., SpacemiT K1 / SiFive P670):
+#   RUSTFLAGS="-C target-feature=+zba,+zbb,+zbc,+zbs,+v"

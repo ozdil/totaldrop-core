@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Per-CPU-Architecture Optimization Profile: x86_64
+# Applies to:
+#   - x86_64-unknown-linux-gnu
+#   - x86_64-unknown-linux-musl
+#   - x86_64-pc-windows-msvc
+#   - x86_64-apple-darwin
+#   - x86_64-linux-android
+#
+# Copy into `.cargo/config.toml` or pass via `./targets/build-arch.sh x86_64`.
+#
+# Cryptographic & SIMD Hardware Dispatch Summary (Suite TD0):
+# - BLAKE3 (`blake3` 1.8.7):
+#     Runtime CPUID detection automatically selects AVX-512F/AVX-512VL (16-way
+#     512-bit chunk compression), AVX2 (8-way 256-bit chunk compression), or
+#     SSE4.1 (4-way 128-bit) without breaking baseline x86-64 portability.
+# - ChaCha20-Poly1305 (`chacha20poly1305` 0.11.0 & `ring` 0.17.14):
+#     Runtime CPUID dispatches AVX2 256-bit 8-block ChaCha20 keystream
+#     generation (and AVX-512 on supported cores) paired with vectorized
+#     Poly1305 MAC evaluation; `ring` also uses PCLMULQDQ / AES-NI / AVX2
+#     assembly on QUIC/TLS 1.3 transport paths (`quinn` + `rustls`).
+# - Carry-less multiplication & SHA (`pclmulqdq`, `sha`, `avx2`):
+#     PCLMULQDQ accelerates polynomial multiplication in transport AEAD suites,
+#     while AVX2/RORX accelerates SHA-512 inside CPace (`sha2` 0.11.1).
+# - Curve25519 / Ristretto255 / Ed25519 (`curve25519-dalek` 5.0, `ed25519-dalek` 3.0):
+#     Uses constant-time 64-bit `u64` limbs (`fiat`/`serial`) by default and
+#     vectorized AVX2 / AVX-512 IFMA multi-scalar backend when target features
+#     are enabled.
+# - ML-KEM-768 (`ml-kem` 0.3.3):
+#     Auto-vectorizes constant-time NTT / inverse-NTT modular butterfly loops
+#     into AVX2 `vpaddd` / `vpmulld` instructions when built with `x86-64-v3`.
+#
+# Note: All TotalDrop workspace crates enforce `unsafe_code = "forbid"`; all
+# architecture intrinsics live strictly inside audited upstream primitives.
+
+[profile_meta]
+architecture = "x86_64"
+baseline_cpu = "x86-64"
+recommended_tuned_cpu = "x86-64-v3"
+default_triple = "x86_64-unknown-linux-gnu"
+simd_features = ["sse2", "ssse3", "sse4.1", "sse4.2", "avx", "avx2", "bmi2", "pclmulqdq"]
+optional_runtime_features = ["avx512f", "avx512vl", "avx512bw", "avx512ifma", "sha", "aes"]
+
+# Portable distribution build (runs on every x86_64 CPU; relies on runtime CPUID
+# inside blake3, chacha20poly1305, and ring for AVX2 / AVX-512 / PCLMULQDQ):
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=x86-64"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-cpu=x86-64"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "target-cpu=x86-64"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "target-cpu=x86-64"]
+
+# Dedicated x86-64-v3 profile (Haswell / Zen 2+ servers and workstations):
+# Enables compile-time AVX2 + BMI2 + MOVBE + PCLMULQDQ for ML-KEM-768 NTT
+# auto-vectorization and Curve25519 parallel Edwards arithmetic:
+#   RUSTFLAGS="-C target-cpu=x86-64-v3 -C target-feature=+pclmulqdq,+aes"
